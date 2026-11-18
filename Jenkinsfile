@@ -6,7 +6,8 @@ pipeline {
     STUDENT_ID = 'SP23-BAI-018'          // matches student_id in config.json
     IMAGE      = 'midterm-app'
     CONTAINER  = 'midterm-app'
-    NOTIFY_TO  = 'qasimalik@gmail.com'
+    NOTIFY_TO  = 'qasimalik@gmail.com'          // instructor
+    SELF_TO    = 'imanshahid142003@gmail.com'   // test mails go here
   }
   stages {
     stage('Checkout latest') {
@@ -72,10 +73,18 @@ pipeline {
     always {
       script {
         env.METRICS = sh(returnStdout: true, script: 'cat artifacts/metrics.json || echo "metrics unavailable"').trim()
+        // Instructor is emailed on every build EXCEPT manual "Build Now" clicks
+        // and commits whose message contains [skip-mail]. Those go to me only.
+        def causes  = currentBuild.getBuildCauses().toString()
+        def lastMsg = sh(returnStdout: true, script: 'git log -1 --pretty=%B || true').trim()
+        def testRun = causes.contains('UserIdCause') || lastMsg.contains('[skip-mail]')
+        env.MAIL_TO  = testRun ? env.SELF_TO : env.NOTIFY_TO
+        env.MAIL_TAG = testRun ? '[TEST] ' : ''
       }
       emailext(
-        to: "${env.NOTIFY_TO}",
-        subject: "[${env.STUDENT_ID}] MIDTERM-${env.STUDENT_ID} build #${env.BUILD_NUMBER}: ${currentBuild.currentResult}",
+        to: "${env.MAIL_TO}",
+        subject: "${env.MAIL_TAG}[${env.STUDENT_ID}] MIDTERM-${env.STUDENT_ID} build #${env.BUILD_NUMBER}: ${currentBuild.currentResult}",
+        mimeType: 'text/plain',
         body: """Student Reg No: ${env.STUDENT_ID}
 Result: ${currentBuild.currentResult}
 Commit: ${env.GIT_COMMIT}
